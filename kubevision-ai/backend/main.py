@@ -5,12 +5,12 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from agents.kubepatch import KubePatchAgent
+from agents.supervisor import SupervisorAgent
 from causal.engine import CausalDiscoveryEngine
 from causal.prometheus_client import PrometheusClient
 from config import get_settings
@@ -60,6 +60,7 @@ causal_engine = CausalDiscoveryEngine(
 )
 connections = ConnectionManager()
 kubepatch_agent = KubePatchAgent(settings)
+supervisor_agent = SupervisorAgent(settings, prometheus, causal_engine)
 
 INCIDENTS: dict[str, dict[str, Any]] = {}
 BACKGROUND_TASKS: list[asyncio.Task[None]] = []
@@ -213,30 +214,15 @@ async def get_memory_stats() -> dict[str, Any]:
 
 @app.post("/api/debug/test-incident")
 async def create_test_incident() -> dict[str, Any]:
-    incident_id = str(uuid4())
-    incident = {
-        "id": incident_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": "open",
-        "severity": "warning",
-        "affected_pod": "frontend",
-        "namespace": settings.default_namespace,
-        "root_cause": "Synthetic CPU pressure on Online Boutique frontend",
-        "causal_chain": ["frontend__cpu_usage", "frontend__memory_working_set"],
-        "proposed_fix": {"memory_limit": "2Gi"},
-        "confidence": 0.82,
-        "memory_path": "cold",
-        "memory_match_score": 0.0,
-        "memory_case_id": None,
-        "simulation_result": None,
-        "pr_url": None,
-        "pr_number": None,
-    }
+    incident, recommendation = await supervisor_agent.analyze_incident(
+        affected_pod="frontend",
+        namespace=settings.default_namespace,
+    )
     supervisor_recommendation = {
-        "proposed_changes": incident["proposed_fix"],
-        "confidence": incident["confidence"],
-        "root_cause": incident["root_cause"],
-        "causal_chain": incident["causal_chain"],
+        "proposed_changes": recommendation.proposed_fix,
+        "confidence": recommendation.confidence,
+        "root_cause": recommendation.root_cause,
+        "causal_chain": recommendation.causal_chain,
     }
     try:
         patch_result = await kubepatch_agent.generate_and_pr(incident, supervisor_recommendation)

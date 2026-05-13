@@ -119,45 +119,44 @@ class CausalDiscoveryEngine:
 
     def _results_to_dag(self, frame: pd.DataFrame, results: dict[str, Any], method: str) -> dict[str, Any]:
         columns = list(frame.columns)
-        q_matrix = results.get("q_matrix")
+        p_matrix = results.get("p_matrix")
         val_matrix = results.get("val_matrix")
         graph = results.get("graph")
         edges: list[dict[str, Any]] = []
 
-        if q_matrix is None or val_matrix is None:
+        if p_matrix is None or val_matrix is None or graph is None:
             return self._dataframe_to_empty_graph(frame, method)
 
-        for source_idx, source_column in enumerate(columns):
-            for target_idx, target_column in enumerate(columns):
-                if source_idx == target_idx:
-                    continue
-                for lag in range(1, min(4, q_matrix.shape[2] - 1) + 1):
-                    q_value = float(q_matrix[source_idx, target_idx, lag])
-                    strength = float(abs(val_matrix[source_idx, target_idx, lag]))
-                    if not np.isfinite(q_value) or not np.isfinite(strength):
-                        continue
-                    if q_value > 0.05 or strength <= 0:
-                        continue
-                    if graph is not None:
-                        marker = graph[source_idx, target_idx, lag]
-                        if isinstance(marker, str) and marker == "":
-                            continue
-                    source_pod, source_metric = self._split_column(source_column)
-                    target_pod, target_metric = self._split_column(target_column)
-                    if source_pod == target_pod:
-                        continue
-                    edges.append(
-                        {
-                            "id": f"{source_column}->{target_column}@{lag}",
-                            "source": source_pod,
-                            "target": target_pod,
-                            "source_metric": source_metric,
-                            "target_metric": target_metric,
-                            "lag_seconds": lag * PrometheusClient.STEP_SECONDS,
-                            "causal_strength": round(strength, 4),
-                            "causal_type": self._causal_type(source_metric, target_metric),
-                        }
-                    )
+        for source_idx, target_idx, lag in zip(*np.where(graph)):
+            if source_idx == target_idx:
+                continue
+            if lag <= 0 or lag >= p_matrix.shape[2]:
+                continue
+            p_value = float(p_matrix[source_idx, target_idx, lag])
+            strength = float(abs(val_matrix[source_idx, target_idx, lag]))
+            if not np.isfinite(p_value) or not np.isfinite(strength):
+                continue
+            if p_value >= 0.05 or strength <= 0:
+                continue
+
+            source_column = columns[source_idx]
+            target_column = columns[target_idx]
+            source_pod, source_metric = self._split_column(source_column)
+            target_pod, target_metric = self._split_column(target_column)
+            if source_pod == target_pod:
+                continue
+            edges.append(
+                {
+                    "id": f"{source_column}->{target_column}@{lag}",
+                    "source": source_pod,
+                    "target": target_pod,
+                    "source_metric": source_metric,
+                    "target_metric": target_metric,
+                    "lag_seconds": lag * PrometheusClient.STEP_SECONDS,
+                    "causal_strength": round(strength, 4),
+                    "causal_type": self._causal_type(source_metric, target_metric),
+                }
+            )
 
         return self._build_graph(frame, edges, method)
 
