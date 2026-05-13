@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+httpx
+tigramite
+numpy==1.26.4
+pandas
+chromadb
+sentence-transformers
+PyGithub
+mistralai
+pydantic
+pydantic-settings
+kubernetes
+statsmodels

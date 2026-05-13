@@ -1,0 +1,39 @@
+# Node
+node_modules/
+.npmrc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+*.sqlite3
+coverage/
+htmlcov/
+*.coverage
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Project docs
+/KubeVision_AI_PRD.md
+/PRD_Changes_Patch.md
