@@ -1,5 +1,7 @@
-
 import DependencyGraph from "./components/DependencyGraph";
+import IncidentQueue from "./components/IncidentQueue";
+import MemoryHealth from "./components/MemoryHealth";
+import ToastStack from "./components/ToastStack";
 import { useClusterData } from "./hooks/useClusterData";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useClusterStore } from "./store/clusterStore";
@@ -76,7 +78,13 @@ export default function App() {
         <div className="mt-6 enter-rise enter-delay-1">
           <DependencyGraph />
         </div>
+
+        <div className="mt-6 grid gap-6 enter-rise enter-delay-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <IncidentQueue />
+          <MemoryHealth />
+        </div>
       </div>
+      <ToastStack />
     </main>
   );
 }

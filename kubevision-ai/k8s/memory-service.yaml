@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+	name: kubevision-memory-pvc
+	namespace: kubevision
+	labels:
+		app.kubernetes.io/name: kubevision-memory
+		app.kubernetes.io/part-of: kubevision-ai
+spec:
+	accessModes:
+		- ReadWriteOnce
+	resources:
+		requests:
+			storage: 5Gi

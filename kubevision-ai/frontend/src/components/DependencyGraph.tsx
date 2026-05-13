@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -11,7 +11,9 @@ import ReactFlow, {
   type NodeProps,
 } from "reactflow";
 import { useClusterStore } from "../store/clusterStore";
-import type { DagEdge, PodMetrics, PodStatus } from "../types";
+import type { DagEdge, Incident, PodMetrics, PodStatus } from "../types";
+
+const API_BASE_URL = "http://localhost:8000";
 
 interface PodNodeData {
   podName: string;
@@ -149,11 +151,25 @@ function selectedEdgeIds(root: string, edges: DagEdge[], affected: Set<string>):
   );
 }
 
+function memoryBadge(memoryPath: string) {
+  if (memoryPath === "fast") {
+    return { label: "Resolved using memory", tone: "fast" } as const;
+  }
+  if (memoryPath === "grounded") {
+    return { label: "AI grounded in memory", tone: "grounded" } as const;
+  }
+  return { label: "AI cold start", tone: "cold" } as const;
+}
+
 export default function DependencyGraph() {
   const dag = useClusterStore((state) => state.dag);
   const pods = useClusterStore((state) => state.pods);
   const incidents = useClusterStore((state) => state.incidents);
+  const setIncidents = useClusterStore((state) => state.setIncidents);
+  const pushToast = useClusterStore((state) => state.pushToast);
   const [selectedPod, setSelectedPod] = useState<string | null>(null);
+  const [sideDiffOpen, setSideDiffOpen] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const podNames = useMemo(() => {
     const names = new Set<string>(Object.keys(pods));
@@ -222,6 +238,77 @@ export default function DependencyGraph() {
   const lastIncident = selectedPod
     ? incidents.find((incident) => incident.affected_pod === selectedPod || incident.causal_chain.some((item) => item.includes(selectedPod)))
     : undefined;
+
+  useEffect(() => {
+    setSideDiffOpen(false);
+  }, [selectedPod]);
+
+  const refreshIncidents = async () => {
+    const response = await fetch(`${API_BASE_URL}/api/incidents`);
+    if (!response.ok) {
+      throw new Error(`Fetch incidents failed: ${response.status}`);
+    }
+    const data = (await response.json()) as { incidents: Incident[] };
+    setIncidents(data.incidents);
+  };
+
+  const fetchIncident = async (incidentId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/incidents/${incidentId}`);
+    if (!response.ok) {
+      throw new Error(`Fetch incident failed: ${response.status}`);
+    }
+    return (await response.json()) as Incident;
+  };
+
+  const approveIncident = async () => {
+    if (!lastIncident || !lastIncident.pr_number || approvingId) {
+      return;
+    }
+    setApprovingId(lastIncident.id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/incidents/${lastIncident.id}/approve-pr`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error(`Approve failed: ${response.status}`);
+      }
+      await refreshIncidents();
+      pushToast("PR approved successfully.", "success");
+    } catch (error) {
+      pushToast("PR approval failed.", "error");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleSideDiff = async () => {
+    if (!lastIncident) {
+      return;
+    }
+    if (sideDiffOpen) {
+      setSideDiffOpen(false);
+      return;
+    }
+    if (lastIncident.kubepatch?.yaml_diff) {
+      setSideDiffOpen(true);
+      pushToast("YAML diff loaded.", "success");
+      return;
+    }
+    try {
+      const latest = await fetchIncident(lastIncident.id);
+      setIncidents(
+        incidents.map((item) => (item.id === latest.id ? latest : item)),
+      );
+      if (latest.kubepatch?.yaml_diff) {
+        setSideDiffOpen(true);
+        pushToast("YAML diff loaded.", "success");
+      } else {
+        pushToast("YAML diff not available.", "error");
+      }
+    } catch (error) {
+      pushToast("Failed to fetch YAML diff.", "error");
+    }
+  };
 
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -301,10 +388,52 @@ export default function DependencyGraph() {
             </dl>
             <div className="rounded-lg border border-[color:var(--border-soft)] bg-white/80 p-3">
               <div className="text-xs uppercase text-[color:var(--ink-soft)]">Last anomaly</div>
+              {lastIncident ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={`badge badge--${memoryBadge(lastIncident.memory_path).tone}`}>
+                    {memoryBadge(lastIncident.memory_path).label}
+                  </span>
+                  <span className="badge badge--neutral">
+                    Match {Math.round((lastIncident.memory_match_score || 0) * 100)}%
+                  </span>
+                  {lastIncident.memory_case_id ? (
+                    <span className="badge badge--neutral">Case {lastIncident.memory_case_id}</span>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="mt-2 text-sm text-[color:var(--ink-strong)]">
                 {lastIncident?.root_cause ?? "No incident recorded for this pod."}
               </p>
             </div>
+            {lastIncident?.kubepatch ? (
+              <div className="rounded-lg border border-[color:var(--border-soft)] bg-white/80 p-3">
+                <div className="text-xs uppercase text-[color:var(--ink-soft)]">Remediation</div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {lastIncident.pr_number && lastIncident.status === "pr_open" ? (
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      onClick={approveIncident}
+                      disabled={approvingId === lastIncident.id}
+                    >
+                      {approvingId === lastIncident.id ? "Approving..." : "Approve PR"}
+                    </button>
+                  ) : null}
+                  {lastIncident.kubepatch ? (
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      onClick={handleSideDiff}
+                    >
+                      {sideDiffOpen ? "Hide YAML diff" : "View YAML diff"}
+                    </button>
+                  ) : null}
+                </div>
+                {sideDiffOpen && lastIncident.kubepatch.yaml_diff ? (
+                  <pre className="diff-block">{lastIncident.kubepatch.yaml_diff}</pre>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex h-full min-h-[320px] items-center justify-center text-center text-sm text-[color:var(--ink-soft)]">

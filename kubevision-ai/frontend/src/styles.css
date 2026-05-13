@@ -281,6 +281,192 @@
   .enter-delay-2 {
     animation-delay: 260ms;
   }
+
+  .incident-card {
+    border-radius: 16px;
+    border: 1px solid rgba(27, 36, 48, 0.12);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 16px 18px;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
+  }
+
+  .badge {
+    --badge-accent: var(--accent-teal);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(27, 36, 48, 0.12);
+    color: var(--badge-accent);
+  }
+
+  .badge--fast {
+    --badge-accent: var(--accent-emerald);
+  }
+
+  .badge--grounded {
+    --badge-accent: var(--accent-amber);
+  }
+
+  .badge--cold {
+    --badge-accent: var(--accent-rose);
+  }
+
+  .badge--neutral {
+    --badge-accent: var(--ink-soft);
+  }
+
+  .memory-bar {
+    display: grid;
+    gap: 6px;
+  }
+
+  .memory-bar__track {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(27, 36, 48, 0.12);
+    overflow: hidden;
+  }
+
+  .memory-bar__fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-teal);
+    transition: width 240ms ease;
+  }
+
+  .memory-bar__fill--fast {
+    background: var(--accent-emerald);
+  }
+
+  .memory-bar__fill--grounded {
+    background: var(--accent-amber);
+  }
+
+  .memory-bar__fill--cold {
+    background: var(--accent-rose);
+  }
+
+  .memory-pattern {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(27, 36, 48, 0.1);
+    color: var(--ink-soft);
+  }
+
+  .memory-pattern__label {
+    color: var(--ink-strong);
+    font-weight: 600;
+  }
+
+  .memory-pattern__count {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .button {
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    border: 1px solid rgba(27, 36, 48, 0.12);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ink-strong);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+  }
+
+  .button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .button--primary {
+    background: var(--accent-emerald);
+    border-color: rgba(31, 157, 127, 0.4);
+    color: white;
+  }
+
+  .button--ghost {
+    background: rgba(255, 255, 255, 0.6);
+    color: var(--ink-soft);
+  }
+
+  .diff-block {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(27, 36, 48, 0.12);
+    background: rgba(27, 36, 48, 0.06);
+    font-size: 11px;
+    color: var(--ink-strong);
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+
+  .toast-stack {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    display: grid;
+    gap: 10px;
+    z-index: 50;
+  }
+
+  .toast {
+    min-width: 220px;
+    max-width: 320px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(27, 36, 48, 0.12);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+    font-size: 12px;
+    color: var(--ink-strong);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .toast--success {
+    border-color: rgba(31, 157, 127, 0.4);
+  }
+
+  .toast--error {
+    border-color: rgba(224, 90, 79, 0.45);
+  }
+
+  .toast--info {
+    border-color: rgba(12, 90, 98, 0.35);
+  }
+
+  .toast__close {
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
 }
 
 .react-flow__edge.causal-edge path {

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from agents.kubepatch import KubePatchAgent
@@ -14,6 +16,7 @@ from agents.supervisor import SupervisorAgent
 from causal.engine import CausalDiscoveryEngine
 from causal.prometheus_client import PrometheusClient
 from config import get_settings
+from memory.store import MemoryStore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,7 +63,8 @@ causal_engine = CausalDiscoveryEngine(
 )
 connections = ConnectionManager()
 kubepatch_agent = KubePatchAgent(settings)
-supervisor_agent = SupervisorAgent(settings, prometheus, causal_engine)
+memory_store = MemoryStore(settings)
+supervisor_agent = SupervisorAgent(settings, prometheus, causal_engine, memory_store)
 
 INCIDENTS: dict[str, dict[str, Any]] = {}
 BACKGROUND_TASKS: list[asyncio.Task[None]] = []
@@ -203,12 +207,43 @@ async def approve_pr(incident_id: str) -> dict[str, Any]:
 
 @app.get("/api/memory/stats")
 async def get_memory_stats() -> dict[str, Any]:
+    routing_counts = Counter(
+        incident.get("memory_path", "cold") for incident in INCIDENTS.values()
+    )
+    total_routed = sum(routing_counts.values())
+    fast_pct = (routing_counts.get("fast", 0) / total_routed * 100.0) if total_routed else 0.0
+    grounded_pct = (routing_counts.get("grounded", 0) / total_routed * 100.0) if total_routed else 0.0
+    cold_pct = (routing_counts.get("cold", 0) / total_routed * 100.0) if total_routed else 0.0
+
     return {
-        "total_incidents": 0,
-        "fast_path_pct": 0.0,
-        "grounded_path_pct": 0.0,
-        "cold_path_pct": 0.0,
-        "top_patterns": [],
+        "total_incidents": memory_store.count(),
+        "fast_path_pct": round(fast_pct, 1),
+        "grounded_path_pct": round(grounded_pct, 1),
+        "cold_path_pct": round(cold_pct, 1),
+        "top_patterns": memory_store.top_patterns(),
+    }
+
+
+@app.post("/api/incidents/{incident_id}/resolve")
+async def resolve_incident(incident_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    incident = INCIDENTS.get(incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    record = memory_store.build_record_from_incident(
+        incident,
+        payload,
+        payload.get("nl_summary"),
+    )
+    stored = memory_store.store_if_qualified(record)
+
+    incident["status"] = "resolved"
+    incident["resolved_at"] = datetime.now(timezone.utc).isoformat()
+    incident["memory_stored"] = stored
+    return {
+        "incident_id": incident_id,
+        "status": incident["status"],
+        "memory_stored": stored,
     }
 
 
@@ -237,9 +272,74 @@ async def create_test_incident() -> dict[str, Any]:
         logger.exception("Debug incident KubePatch flow failed")
         raise HTTPException(status_code=502, detail=f"KubePatch flow failed: {exc}") from exc
 
+    incident_id = incident["id"]
     INCIDENTS[incident_id] = incident
     await connections.broadcast({"type": "new_incident", "payload": incident})
     return incident
+
+
+@app.post("/api/debug/seed-memory")
+async def seed_memory_case(payload: dict[str, Any] | None = Body(default=None)) -> dict[str, Any]:
+    payload = payload or {}
+    incident_id = payload.get("incident_id")
+    if incident_id:
+        incident = INCIDENTS.get(str(incident_id))
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+    else:
+        incident = {
+            "id": f"demo-{uuid4().hex[:8]}",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "resolved",
+            "severity": "high",
+            "affected_pod": payload.get("affected_pod", "frontend"),
+            "namespace": payload.get("namespace", settings.default_namespace),
+            "root_cause": payload.get("root_cause", "Memory pressure causing OOMKilled events"),
+            "causal_chain": payload.get(
+                "causal_chain",
+                ["frontend -> checkoutservice (75s, memory_pressure)"],
+            ),
+            "proposed_fix": payload.get("proposed_fix", {"memory_limit": "2Gi"}),
+            "confidence": payload.get("confidence", 0.92),
+            "memory_path": "fast",
+            "memory_match_score": 0.98,
+            "memory_case_id": None,
+            "symptom_vector": payload.get(
+                "symptom_vector",
+                {
+                    "cpu_spike_ratio": 2.8,
+                    "memory_pressure": 0.93,
+                    "restart_count_delta": 2,
+                    "causal_source": "frontend",
+                },
+            ),
+            "error_signature": payload.get("error_signature", "OOMKilled exit code 137"),
+            "simulation_result": None,
+            "pr_url": None,
+            "pr_number": None,
+        }
+
+    outcome_payload = {
+        "verified": payload.get("verified", True),
+        "time_to_resolution_mins": payload.get("time_to_resolution_mins", 4),
+        "recurrence_in_24h": payload.get("recurrence_in_24h", False),
+        "effectiveness_score": payload.get("effectiveness_score", 0.97),
+    }
+    record = memory_store.build_record_from_incident(
+        incident,
+        outcome_payload,
+        payload.get(
+            "nl_summary",
+            "OOMKilled in checkout-service caused by memory pressure. Resolved by increasing memory limit.",
+        ),
+    )
+    stored = memory_store.store_if_qualified(record)
+
+    return {
+        "incident_id": record.incident_id,
+        "stored": stored,
+        "total_incidents": memory_store.count(),
+    }
 
 
 @app.websocket("/ws/live")

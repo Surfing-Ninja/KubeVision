@@ -1,16 +1,19 @@
 import { create } from "zustand";
-import type { DagData, Incident, MemoryStats, PodMetrics } from "../types";
+import type { DagData, Incident, MemoryStats, PodMetrics, Toast, ToastTone } from "../types";
 
 interface ClusterState {
   dag: DagData;
   pods: Record<string, PodMetrics>;
   incidents: Incident[];
   memoryStats: MemoryStats;
+  toasts: Toast[];
   setDag: (dag: DagData) => void;
   updatePodMetrics: (pods: Record<string, PodMetrics>) => void;
   addIncident: (incident: Incident) => void;
   setIncidents: (incidents: Incident[]) => void;
   setMemoryStats: (memoryStats: MemoryStats) => void;
+  pushToast: (message: string, tone?: ToastTone, ttlMs?: number) => void;
+  removeToast: (id: string) => void;
 }
 
 const emptyMemoryStats: MemoryStats = {
@@ -26,6 +29,7 @@ export const useClusterStore = create<ClusterState>((set) => ({
   pods: {},
   incidents: [],
   memoryStats: emptyMemoryStats,
+  toasts: [],
   setDag: (dag) => set({ dag }),
   updatePodMetrics: (pods) =>
     set((state) => ({
@@ -41,4 +45,19 @@ export const useClusterStore = create<ClusterState>((set) => ({
     }),
   setIncidents: (incidents) => set({ incidents }),
   setMemoryStats: (memoryStats) => set({ memoryStats }),
+  pushToast: (message, tone = "info", ttlMs = 3500) => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    set((state) => ({
+      toasts: [...state.toasts, { id, message, tone }],
+    }));
+    window.setTimeout(() => {
+      set((state) => ({
+        toasts: state.toasts.filter((toast) => toast.id !== id),
+      }));
+    }, ttlMs);
+  },
+  removeToast: (id) =>
+    set((state) => ({
+      toasts: state.toasts.filter((toast) => toast.id !== id),
+    })),
 }));
