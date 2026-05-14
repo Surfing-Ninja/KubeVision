@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     github_token: str | None = Field(default=None, alias="GITHUB_TOKEN")
     github_repo: str | None = Field(default=None, alias="GITHUB_REPO")
     prometheus_url: str = Field(
-        default="http://prometheus-service.monitoring.svc.cluster.local:9090",
+        default="http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090",
         alias="PROMETHEUS_URL",
     )
     chroma_persist_dir: str = Field(default="/data/chromadb", alias="CHROMA_PERSIST_DIR")

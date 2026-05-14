@@ -71,6 +71,8 @@ kube_twin = KubeTwin(settings, prometheus)
 INCIDENTS: dict[str, dict[str, Any]] = {}
 BACKGROUND_TASKS: list[asyncio.Task[None]] = []
 
+logger.warning("INCIDENTS store is in-memory only. Pod restart will clear all incidents.")
+
 
 async def dag_broadcast_loop() -> None:
     while True:
@@ -351,6 +353,13 @@ async def create_test_incident() -> dict[str, Any]:
     INCIDENTS[incident_id] = incident
     await connections.broadcast({"type": "new_incident", "payload": incident})
     return incident
+
+
+@app.post("/api/debug/clear-incidents")
+async def clear_incidents() -> dict[str, Any]:
+    cleared = len(INCIDENTS)
+    INCIDENTS.clear()
+    return {"cleared": cleared}
 
 
 @app.post("/api/debug/seed-memory")

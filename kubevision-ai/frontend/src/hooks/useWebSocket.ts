@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useClusterStore } from "../store/clusterStore";
 import type { LiveMessage } from "../types";
 
-const DEFAULT_WS_URL = "ws://localhost:8000/ws/live";
+const DEFAULT_WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000/ws/live";
 
 export function useWebSocket(url = DEFAULT_WS_URL): void {
   const setDag = useClusterStore((state) => state.setDag);

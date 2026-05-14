@@ -161,6 +161,7 @@ Install frontend dependencies and run the UI:
 
 ```
 cd frontend
+cp .env.example .env
 npm install
 npm run dev
 ```
@@ -189,10 +190,26 @@ Build and deploy the backend:
 
 ```
 docker build -t kubevision-backend:latest backend
+kubectl create secret generic kubevision-secrets -n kubevision \
+	--from-literal=MISTRAL_API_KEY=... \
+	--from-literal=GITHUB_TOKEN=... \
+	--from-literal=GITHUB_REPO=...
 kubectl apply -f k8s/kubevision-backend.yaml
-kubectl apply -f k8s/causal-engine.yaml
 kubectl apply -f k8s/memory-service.yaml
 ```
+
+Apply order checklist
+
+1. Install cluster dependencies
+	- `./cluster/k3s-install.sh`
+	- `./cluster/helm-installs.sh`
+2. Create secrets
+	- `kubectl create secret generic kubevision-secrets -n kubevision --from-literal=MISTRAL_API_KEY=... --from-literal=GITHUB_TOKEN=... --from-literal=GITHUB_REPO=...`
+3. Deploy backend services
+	- `kubectl apply -f k8s/memory-service.yaml`
+	- `kubectl apply -f k8s/kubevision-backend.yaml`
+4. Port-forward services
+	- `./scripts/port-forward.sh`
 
 ## API Reference
 
@@ -645,6 +662,23 @@ Configure values in kubevision-ai/.env.
 - MEMORY_DECAY_RATE
 - SIMULATION_CONFIDENCE_AUTO_PR
 - SIMULATION_CONFIDENCE_LOW
+
+Frontend environment
+
+- VITE_API_BASE_URL (default http://localhost:8000)
+- VITE_WS_URL (default ws://localhost:8000/ws/live)
+
+Secret cleanup helper
+
+```
+kubectl delete secret kubevision-secrets -n kubevision
+```
+
+Recommended Prometheus URL:
+
+```
+PROMETHEUS_URL=http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+```
 
 ## Troubleshooting
 

@@ -41,7 +41,7 @@ spec:
               mountPath: /data/chromadb
           env:
             - name: PROMETHEUS_URL
-              value: "http://prometheus-service.monitoring.svc.cluster.local:9090"
+              value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
             - name: DEFAULT_NAMESPACE
               value: "default"
             - name: CAUSAL_WINDOW_MINUTES
@@ -50,6 +50,21 @@ spec:
               value: "60"
             - name: CHROMA_PERSIST_DIR
               value: "/data/chromadb"
+            - name: MISTRAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubevision-secrets
+                  key: MISTRAL_API_KEY
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kubevision-secrets
+                  key: GITHUB_TOKEN
+            - name: GITHUB_REPO
+              valueFrom:
+                secretKeyRef:
+                  name: kubevision-secrets
+                  key: GITHUB_REPO
           readinessProbe:
             httpGet:
               path: /healthz

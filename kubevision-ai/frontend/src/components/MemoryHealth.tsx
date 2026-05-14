@@ -3,6 +3,8 @@ import { useClusterStore } from "../store/clusterStore";
 
 type Tone = "fast" | "grounded" | "cold";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
 function MemoryBar({ label, value, tone }: { label: string; value: number; tone: Tone }) {
 	const safeValue = Math.max(0, Math.min(100, value));
 	return (
@@ -31,7 +33,7 @@ export default function MemoryHealth() {
 		}
 		setSeeding(true);
 		try {
-			const response = await fetch("http://localhost:8000/api/debug/seed-memory", {
+			const response = await fetch(`${API_BASE_URL}/api/debug/seed-memory`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -41,7 +43,7 @@ export default function MemoryHealth() {
 			if (!response.ok) {
 				throw new Error(`Seed failed: ${response.status}`);
 			}
-			const statsResponse = await fetch("http://localhost:8000/api/memory/stats");
+			const statsResponse = await fetch(`${API_BASE_URL}/api/memory/stats`);
 			if (statsResponse.ok) {
 				setMemoryStats(await statsResponse.json());
 			}

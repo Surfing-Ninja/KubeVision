@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useClusterStore } from "../store/clusterStore";
 import type { Incident } from "../types";
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const SIMULATION_PASS_THRESHOLD = 0.8;
 
 function memoryBadge(incident: Incident) {
@@ -21,6 +21,7 @@ export default function IncidentQueue() {
 	const pushToast = useClusterStore((state) => state.pushToast);
 	const [approvingId, setApprovingId] = useState<string | null>(null);
 	const [openDiffId, setOpenDiffId] = useState<string | null>(null);
+	const [clearing, setClearing] = useState(false);
 	const toastedPrIds = useRef(new Set<string>());
 	const sorted = useMemo(
 		() => [...incidents].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -100,6 +101,28 @@ export default function IncidentQueue() {
 		}
 	};
 
+	const clearIncidents = async () => {
+		if (clearing) {
+			return;
+		}
+		setClearing(true);
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/debug/clear-incidents`, {
+				method: "POST",
+			});
+			if (!response.ok) {
+				throw new Error(`Clear incidents failed: ${response.status}`);
+			}
+			setIncidents([]);
+			setOpenDiffId(null);
+			pushToast("Incidents cleared.", "success");
+		} catch (error) {
+			pushToast("Failed to clear incidents.", "error");
+		} finally {
+			setClearing(false);
+		}
+	};
+
 	return (
 		<section className="panel-surface panel-surface--glass p-5">
 			<div className="flex flex-wrap items-center justify-between gap-3">
@@ -107,7 +130,17 @@ export default function IncidentQueue() {
 					<p className="eyebrow">Active incidents</p>
 					<h2 className="text-lg font-display text-[color:var(--ink-strong)]">Incident queue</h2>
 				</div>
-				<div className="text-xs text-[color:var(--ink-soft)]">{sorted.length} tracked</div>
+				<div className="flex flex-wrap items-center gap-3 text-xs text-[color:var(--ink-soft)]">
+					<span>{sorted.length} tracked</span>
+					<button
+						className="button button--ghost"
+						type="button"
+						onClick={clearIncidents}
+						disabled={clearing}
+					>
+						{clearing ? "Clearing..." : "Clear incidents"}
+					</button>
+				</div>
 			</div>
 
 			{sorted.length === 0 ? (

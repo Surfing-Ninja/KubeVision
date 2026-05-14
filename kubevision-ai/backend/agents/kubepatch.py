@@ -59,6 +59,30 @@ class KubePatchAgent:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._kubernetes_loaded = False
+        if self.settings.github_token:
+            self.validate_github_token()
+
+    def validate_github_token(self) -> None:
+        if not self.settings.github_token:
+            return
+        if not self.settings.github_repo:
+            logger.warning("GITHUB_REPO is not set; skipping GitHub token validation.")
+            return
+        try:
+            github = Github(self.settings.github_token)
+            repo = github.get_repo(self.settings.github_repo)
+            user = github.get_user()
+            username = user.login or "unknown"
+            permission = repo.get_collaborator_permission(username)
+            if permission not in {"admin", "write", "maintain"}:
+                logger.warning(
+                    "GitHub token for user %s has %s permission on %s; write access is required to open PRs.",
+                    username,
+                    permission,
+                    repo.full_name,
+                )
+        except Exception as exc:
+            logger.warning("GitHub token validation failed: %s", exc)
 
     def _load_kubernetes_config(self) -> None:
         if self._kubernetes_loaded:

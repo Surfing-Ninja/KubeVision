@@ -13,7 +13,7 @@ import ReactFlow, {
 import { useClusterStore } from "../store/clusterStore";
 import type { DagEdge, Incident, PodMetrics, PodStatus } from "../types";
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const SIMULATION_PASS_THRESHOLD = 0.8;
 
 interface PodNodeData {
