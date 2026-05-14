@@ -17,6 +17,7 @@ from causal.engine import CausalDiscoveryEngine
 from causal.prometheus_client import PrometheusClient
 from config import get_settings
 from memory.store import MemoryStore
+from simulator.kubetwin import KubeTwin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ connections = ConnectionManager()
 kubepatch_agent = KubePatchAgent(settings)
 memory_store = MemoryStore(settings)
 supervisor_agent = SupervisorAgent(settings, prometheus, causal_engine, memory_store)
+kube_twin = KubeTwin(settings, prometheus)
 
 INCIDENTS: dict[str, dict[str, Any]] = {}
 BACKGROUND_TASKS: list[asyncio.Task[None]] = []
@@ -164,10 +166,73 @@ async def get_pod_metrics(namespace: str | None = None) -> dict[str, Any]:
     }
 
 
+@app.post("/api/simulate")
+async def simulate_fix(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    pod_name = payload.get("pod_name") or payload.get("pod") or payload.get("affected_pod")
+    if not pod_name:
+        raise HTTPException(status_code=422, detail="pod_name is required")
+
+    proposed_changes = (
+        payload.get("proposed_changes")
+        or payload.get("proposed_fix")
+        or payload.get("patch")
+        or {}
+    )
+    if not isinstance(proposed_changes, dict):
+        raise HTTPException(status_code=422, detail="proposed_changes must be an object")
+
+    namespace = payload.get("namespace") or settings.default_namespace
+    simulation_result = await kube_twin.simulate_fix(pod_name, proposed_changes, namespace)
+    if not simulation_result:
+        raise HTTPException(status_code=404, detail="Simulation could not run for the requested pod")
+
+    return {
+        "pod_name": pod_name,
+        "namespace": namespace,
+        "proposed_changes": proposed_changes,
+        "simulation_result": simulation_result,
+    }
+
+
 @app.get("/api/incidents")
-async def list_incidents() -> dict[str, Any]:
-    incidents = sorted(INCIDENTS.values(), key=lambda item: item["created_at"], reverse=True)
-    return {"incidents": incidents}
+async def list_incidents(
+    status: str | None = None,
+    severity: str | None = None,
+    namespace: str | None = None,
+    affected_pod: str | None = None,
+    memory_path: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    sort: str = "desc",
+) -> dict[str, Any]:
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be 0 or greater")
+    if sort not in {"asc", "desc"}:
+        raise HTTPException(status_code=422, detail="sort must be asc or desc")
+
+    incidents = list(INCIDENTS.values())
+    if status:
+        incidents = [item for item in incidents if item.get("status") == status]
+    if severity:
+        incidents = [item for item in incidents if item.get("severity") == severity]
+    if namespace:
+        incidents = [item for item in incidents if item.get("namespace") == namespace]
+    if affected_pod:
+        incidents = [item for item in incidents if item.get("affected_pod") == affected_pod]
+    if memory_path:
+        incidents = [item for item in incidents if item.get("memory_path") == memory_path]
+
+    incidents.sort(key=lambda item: item["created_at"], reverse=(sort == "desc"))
+    total = len(incidents)
+    window = incidents[offset : offset + limit]
+    return {
+        "incidents": window,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @app.get("/api/incidents/{incident_id}")
@@ -253,9 +318,19 @@ async def create_test_incident() -> dict[str, Any]:
         affected_pod="frontend",
         namespace=settings.default_namespace,
     )
+    simulation_result = await kube_twin.simulate_fix(
+        incident["affected_pod"],
+        recommendation.proposed_fix,
+        incident["namespace"],
+    )
+    incident["simulation_result"] = simulation_result
+    simulation_confidence = (
+        float(simulation_result.get("confidence")) if simulation_result else recommendation.confidence
+    )
+    incident["confidence"] = simulation_confidence
     supervisor_recommendation = {
         "proposed_changes": recommendation.proposed_fix,
-        "confidence": recommendation.confidence,
+        "confidence": simulation_confidence,
         "root_cause": recommendation.root_cause,
         "causal_chain": recommendation.causal_chain,
     }

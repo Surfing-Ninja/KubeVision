@@ -90,6 +90,9 @@ export interface Incident {
 
 export interface IncidentsResponse {
   incidents: Incident[];
+  total?: number;
+  limit?: number;
+  offset?: number;
 }
 
 export interface TopPattern {

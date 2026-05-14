@@ -14,6 +14,7 @@ import { useClusterStore } from "../store/clusterStore";
 import type { DagEdge, Incident, PodMetrics, PodStatus } from "../types";
 
 const API_BASE_URL = "http://localhost:8000";
+const SIMULATION_PASS_THRESHOLD = 0.8;
 
 interface PodNodeData {
   podName: string;
@@ -238,6 +239,10 @@ export default function DependencyGraph() {
   const lastIncident = selectedPod
     ? incidents.find((incident) => incident.affected_pod === selectedPod || incident.causal_chain.some((item) => item.includes(selectedPod)))
     : undefined;
+  const simulation = lastIncident?.simulation_result;
+  const simulationPassed = Boolean(
+    simulation && simulation.confidence >= SIMULATION_PASS_THRESHOLD,
+  );
 
   useEffect(() => {
     setSideDiffOpen(false);
@@ -405,19 +410,37 @@ export default function DependencyGraph() {
                 {lastIncident?.root_cause ?? "No incident recorded for this pod."}
               </p>
             </div>
+            {simulation ? (
+              <div className="simulation-card">
+                <div className="simulation-card__header">
+                  <span>Simulation confidence</span>
+                  <strong>{Math.round(simulation.confidence * 100)}%</strong>
+                </div>
+                <div className="simulation-card__body">
+                  <div>Headroom: {simulation.headroom_pct}%</div>
+                  <div>Node capacity: {simulation.fits_on_node ? "PASS" : "FAIL"}</div>
+                  <div>Resolves OOM: {simulation.resolves_oom ? "PASS" : "CHECK"}</div>
+                </div>
+              </div>
+            ) : null}
             {lastIncident?.kubepatch ? (
               <div className="rounded-lg border border-[color:var(--border-soft)] bg-white/80 p-3">
                 <div className="text-xs uppercase text-[color:var(--ink-soft)]">Remediation</div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {lastIncident.pr_number && lastIncident.status === "pr_open" ? (
-                    <button
-                      className="button button--primary"
-                      type="button"
-                      onClick={approveIncident}
-                      disabled={approvingId === lastIncident.id}
-                    >
-                      {approvingId === lastIncident.id ? "Approving..." : "Approve PR"}
-                    </button>
+                    <>
+                      <span className={`badge ${simulationPassed ? "badge--pass" : "badge--neutral"}`}>
+                        {simulationPassed ? "Simulation passed" : "Simulation pending"}
+                      </span>
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={approveIncident}
+                        disabled={approvingId === lastIncident.id || !simulationPassed}
+                      >
+                        {approvingId === lastIncident.id ? "Approving..." : "Approve PR"}
+                      </button>
+                    </>
                   ) : null}
                   {lastIncident.kubepatch ? (
                     <button

@@ -3,6 +3,7 @@ import { useClusterStore } from "../store/clusterStore";
 import type { Incident } from "../types";
 
 const API_BASE_URL = "http://localhost:8000";
+const SIMULATION_PASS_THRESHOLD = 0.8;
 
 function memoryBadge(incident: Incident) {
 	if (incident.memory_path === "fast") {
@@ -118,6 +119,10 @@ export default function IncidentQueue() {
 						const matchScore = Math.round((incident.memory_match_score || 0) * 100);
 						const hasDiff = Boolean(incident.kubepatch);
 						const diffOpen = openDiffId === incident.id;
+						const simulation = incident.simulation_result;
+						const simulationPassed = Boolean(
+							simulation && simulation.confidence >= SIMULATION_PASS_THRESHOLD,
+						);
 						return (
 							<article key={incident.id} className="incident-card">
 								<div className="flex flex-wrap items-start justify-between gap-3">
@@ -131,12 +136,17 @@ export default function IncidentQueue() {
 									<div className="flex flex-wrap items-center gap-2">
 										<span className={`badge badge--${badge.tone}`}>{badge.label}</span>
 										<span className="badge badge--neutral">{incident.status.replace("_", " ")}</span>
+										{incident.status === "pr_open" ? (
+											<span className={`badge ${simulationPassed ? "badge--pass" : "badge--neutral"}`}>
+												{simulationPassed ? "Simulation passed" : "Simulation pending"}
+											</span>
+										) : null}
 										{incident.pr_number && incident.status === "pr_open" ? (
 											<button
 												className="button button--primary"
 												onClick={() => approveIncident(incident)}
 												type="button"
-												disabled={approvingId === incident.id}
+												disabled={approvingId === incident.id || !simulationPassed}
 											>
 												{approvingId === incident.id ? "Approving..." : "Approve PR"}
 											</button>
@@ -154,6 +164,20 @@ export default function IncidentQueue() {
 										</a>
 									) : null}
 								</div>
+
+								{simulation ? (
+									<div className="simulation-card">
+										<div className="simulation-card__header">
+											<span>Simulation confidence</span>
+											<strong>{Math.round(simulation.confidence * 100)}%</strong>
+										</div>
+										<div className="simulation-card__body">
+											<div>Headroom: {simulation.headroom_pct}%</div>
+											<div>Node capacity: {simulation.fits_on_node ? "PASS" : "FAIL"}</div>
+											<div>Resolves OOM: {simulation.resolves_oom ? "PASS" : "CHECK"}</div>
+										</div>
+									</div>
+								) : null}
 
 								{hasDiff ? (
 									<div className="mt-3">

@@ -1,3 +1,5 @@
+import AgentInsights from "./components/AgentInsights";
+import AnomalyTimeline from "./components/AnomalyTimeline";
 import DependencyGraph from "./components/DependencyGraph";
 import IncidentQueue from "./components/IncidentQueue";
 import MemoryHealth from "./components/MemoryHealth";
@@ -79,8 +81,13 @@ export default function App() {
           <DependencyGraph />
         </div>
 
-        <div className="mt-6 grid gap-6 enter-rise enter-delay-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="mt-6 enter-rise enter-delay-2">
+          <AnomalyTimeline />
+        </div>
+
+        <div className="mt-6 grid gap-6 enter-rise enter-delay-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
           <IncidentQueue />
+          <AgentInsights />
           <MemoryHealth />
         </div>
       </div>
